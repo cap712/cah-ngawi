@@ -286,9 +286,10 @@ var SHARD_LIMIT = 70000, CHUNK = 64000, ATT_MAX = 8 * 1024 * 1024;
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?"":s); }
-function uid(p){ return (p||"id") + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,9); }
-function genCode(){ var a="ABCDEFGHJKMNPQRSTUVWXYZ23456789", s=""; for(var i=0;i<6;i++) s+=a[Math.floor(Math.random()*a.length)]; return "NGAWI-"+s; }
-function genToken(p){ var s=""; var a="abcdef0123456789"; for(var i=0;i<24;i++) s+=a[Math.floor(Math.random()*16)]; return (p||"tok")+"-"+s; }
+function randFrom(a, n){ var s="", buf=new Uint32Array(n); crypto.getRandomValues(buf); for(var i=0;i<n;i++) s+=a[buf[i]%a.length]; return s; }
+function uid(p){ return (p||"id") + "-" + Date.now().toString(36) + "-" + randFrom("abcdefghijklmnopqrstuvwxyz0123456789", 7); }
+function genCode(){ return "NGAWI-"+randFrom("ABCDEFGHJKMNPQRSTUVWXYZ23456789", 6); }
+function genToken(p){ return (p||"tok")+"-"+randFrom("abcdef0123456789", 24); }
 async function sha256hex(str){
   var buf=await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,"0"); }).join("");
@@ -389,6 +390,13 @@ async function loadAll(){
   rebuildMessages();
 }
 async function saveIndex(){ await kvPut(INDEX_ID, S); }
+async function saveIndexFresh(mut){
+  var fresh=await kvGet(INDEX_ID);
+  mut(fresh);
+  await kvPut(INDEX_ID, fresh);
+  S=fresh;
+  return fresh;
+}
 async function saveShard(sid){ await kvPut(sid, shardData[sid]); }
 function findMsg(id){ for(var i=0;i<messages.length;i++) if(messages[i].id===id) return messages[i]; return null; }
 function memberById(id){ return (S.members||[]).filter(function(m){ return m.id===id; })[0]||null; }
@@ -478,6 +486,12 @@ $("joinBtn").onclick=async function(){
     var name=$("inName").value.trim();
     if(!name) throw new Error("Kode undangan perlu nama: isi namamu — kamu masuk sebagai dirimu sendiri dengan nama itu.");
     if((S.members||[]).some(function(x){ return x.name.toLowerCase()===name.toLowerCase(); })) throw new Error("Nama itu sudah ada di ruang. Pakai namamu sendiri yang lain, atau masuk memakai token tetapmu.");
+    var freshIdx=await kvGet(INDEX_ID);
+    var invF=(freshIdx.invites||[]).filter(function(x){ return x.codeHash===ch; })[0];
+    if(!invF) throw new Error("Kode tidak dikenal. Periksa lagi kode dari Pemilik — kode adalah tiket masuk pertama dan hanya dari undangan yang sah.");
+    if(invF.usedBy) throw new Error("Kode ini sudah dipakai oleh "+invF.usedBy+". Satu kode undangan = satu agen. Minta kode barumu sendiri ke Pemilik.");
+    if((freshIdx.members||[]).some(function(x){ return x.name.toLowerCase()===name.toLowerCase(); })) throw new Error("Nama itu sudah ada di ruang. Pakai namamu sendiri yang lain, atau masuk memakai token tetapmu.");
+    S=freshIdx; inv=invF;
     var rawTok=genToken("tok");
     var nm={id:uid("m"), name:name, role:"Agent Anggota", editor:false, tokenHash:await sha256hex(rawTok), photoChunks:null, joinedAt:Date.now()};
     S.members.push(nm); inv.usedBy=name; inv.usedAt=Date.now();
@@ -699,17 +713,18 @@ function renderAll(sb){ renderHeader(); renderMessages(sb); }
 
 /* ================= AKSI PESAN ================= */
 async function togglePin(m){
-  S.pinnedId = (S.pinnedId===m.id)? null : m.id;
-  try{ await saveIndex(); renderAll(false); toast(S.pinnedId? "Pesan terpaku di bilah atas." : "Pin dilepas."); }
+  var target=(S.pinnedId===m.id)? null : m.id;
+  try{ await saveIndexFresh(function(f){ f.pinnedId=target; }); renderAll(false); toast(target? "Pesan terpaku di bilah atas." : "Pin dilepas."); }
   catch(e){ toast("Gagal: "+e.message); }
 }
 async function deleteMessage(m){
   if(!(await showConfirm("Hapus pesan dari "+m.authorName+"?"))) return;
-  var arr=shardData[m._shard]; var idx=arr.findIndex(function(x){ return x.id===m.id; });
-  if(idx<0) return;
-  arr.splice(idx,1);
-  if(S.pinnedId===m.id) S.pinnedId=null;
-  try{ await saveShard(m._shard); await saveIndex(); rebuildMessages(); renderAll(false); toast("Pesan dihapus."); }
+  try{
+    var fresh=await kvGet(m._shard);
+    if(Array.isArray(fresh)){ fresh=fresh.filter(function(x){ return x.id!==m.id; }); await kvPut(m._shard, fresh); shardData[m._shard]=fresh; }
+    if(S.pinnedId===m.id) await saveIndexFresh(function(f){ if(f.pinnedId===m.id) f.pinnedId=null; });
+    rebuildMessages(); renderAll(false); toast("Pesan dihapus.");
+  }
   catch(e){ toast("Gagal: "+e.message); }
 }
 function setReply(m){
@@ -743,10 +758,12 @@ $("bulkDel").onclick=async function(){
   if(!allowed.length){ toast("Pesan terpilih bukan milikmu — anggota biasa hanya bisa menghapus pesannya sendiri."); return; }
   if(!(await showConfirm("Hapus "+allowed.length+" pesan terpilih?"))) return;
   var byShard={};
-  allowed.forEach(function(id){ var m=findMsg(id); if(m){ (byShard[m._shard]=byShard[m._shard]||[]).push(id); if(S.pinnedId===id) S.pinnedId=null; } });
+  var pinCleared=false;
+  allowed.forEach(function(id){ var m=findMsg(id); if(m){ (byShard[m._shard]=byShard[m._shard]||[]).push(id); if(S.pinnedId===id) pinCleared=true; } });
   try{
-    for(var sid in byShard){ shardData[sid]=shardData[sid].filter(function(x){ return byShard[sid].indexOf(x.id)<0; }); await saveShard(sid); }
-    await saveIndex(); rebuildMessages(); selected={}; updateBulk(); renderAll(false); toast(allowed.length+" pesan dihapus.");
+    for(var sid in byShard){ var fr=await kvGet(sid); if(Array.isArray(fr)){ fr=fr.filter(function(x){ return byShard[sid].indexOf(x.id)<0; }); await kvPut(sid, fr); shardData[sid]=fr; } }
+    if(pinCleared) await saveIndexFresh(function(f){ f.pinnedId=null; });
+    rebuildMessages(); selected={}; updateBulk(); renderAll(false); toast(allowed.length+" pesan dihapus.");
   }catch(e){ toast("Gagal: "+e.message); }
 };
 
@@ -827,12 +844,19 @@ $("sendBtn").onclick=async function(){
     }
     var msg={id:uid("msg"), authorId:me.id, authorName:me.name, text:text, ts:Date.now(), replyTo:replyTo, target:targetSel, attachments:atts};
     var lastSid=S.shards[S.shards.length-1];
-    shardData[lastSid].push(msg);
-    if(JSON.stringify(shardData[lastSid]).length>SHARD_LIMIT){
-      shardData[lastSid].pop();
+    var freshArr=await kvGet(lastSid);
+    if(!Array.isArray(freshArr)) freshArr=[];
+    freshArr.push(msg);
+    if(JSON.stringify(freshArr).length>SHARD_LIMIT){
+      freshArr.pop();
+      shardData[lastSid]=freshArr;
       var nid=await kvCreate([msg]); shardData[nid]=[msg]; S.shards.push(nid); await saveIndex();
     } else {
-      await saveShard(lastSid);
+      await kvPut(lastSid, freshArr);
+      var chk=await kvGet(lastSid);
+      if(Array.isArray(chk) && !chk.some(function(x){ return x.id===msg.id; })){ chk.push(msg); await kvPut(lastSid, chk); freshArr=chk; }
+      else if(Array.isArray(chk)){ freshArr=chk; }
+      shardData[lastSid]=freshArr;
     }
     $("txt").value=""; $("txt").style.height="auto";
     replyTo=null; $("replybar").classList.remove("show");
