@@ -428,6 +428,18 @@ async function applyThemeAndLogo(){
   } else if(themeURL){ themeURL=null; $("bgImg").style.display="none"; }
   $("lockName").textContent=S.settings.name||"CAH NGAWI";
   $("hName").textContent=S.settings.name||"CAH NGAWI";
+  applyTransparency();
+}
+function applyTransparency(){
+  if(!S.settings) return;
+  var bgOp=(typeof S.settings.bgOp==="number")?S.settings.bgOp:100;
+  var pT=(typeof S.settings.panelTrans==="number")?S.settings.panelTrans:12;
+  var bi=$("bgImg"); if(bi) bi.style.opacity=(bgOp/100).toString();
+  var pa=(100-pT)/100, rs=document.documentElement.style;
+  rs.setProperty("--glass","rgba(247,240,221,"+(pa*0.95).toFixed(3)+")");
+  rs.setProperty("--glass2","rgba(242,242,229,"+pa.toFixed(3)+")");
+  rs.setProperty("--bubble-other","rgba(232,238,229,"+pa.toFixed(3)+")");
+  rs.setProperty("--bubble-mine","rgba(220,226,200,"+pa.toFixed(3)+")");
 }
 
 /* ================= LAYAR KUNCI ================= */
@@ -900,7 +912,21 @@ function renderServerTab(){
   var thFile=document.createElement("input"); thFile.type="file"; thFile.accept="image/*"; thFile.style.marginTop="8px"; thRow.appendChild(thFile);
   var resetTh=document.createElement("button"); resetTh.className="mini-btn"; resetTh.type="button"; resetTh.textContent="Pakai Galaksi Bawaan"; resetTh.style.marginLeft="8px";
   resetTh.onclick=async function(){ S.settings.themeChunks=null; themeURL=null; $("bgImg").style.display="none"; try{ await saveIndex(); renderServerTab(); toast("Tema kembali ke galaksi bawaan."); }catch(e){ toast("Gagal: "+e.message); } };
-  thRow.appendChild(resetTh); w.appendChild(thRow);
+  thRow.appendChild(resetTh);
+  function mkSlider(label, min, max, val, key){
+    var wrap=document.createElement("div"); wrap.style.marginTop="12px";
+    var lab=document.createElement("div"); lab.className="hint"; lab.style.display="flex"; lab.style.justifyContent="space-between";
+    var s1=document.createElement("span"); s1.textContent=label;
+    var s2=document.createElement("span"); s2.textContent=val+"%";
+    lab.appendChild(s1); lab.appendChild(s2); wrap.appendChild(lab);
+    var rg=document.createElement("input"); rg.type="range"; rg.min=min; rg.max=max; rg.step="1"; rg.value=val; rg.style.width="100%";
+    rg.oninput=function(){ s2.textContent=rg.value+"%"; S.settings[key]=parseInt(rg.value,10); applyTransparency(); };
+    wrap.appendChild(rg); thRow.appendChild(wrap); return rg;
+  }
+  mkSlider("Kekuatan latar — seberapa penuh gambar tampil", 10, 100, (typeof S.settings.bgOp==="number"?S.settings.bgOp:100), "bgOp");
+  mkSlider("Transparansi panel & gelembung — seberapa tembus ke latar", 0, 85, (typeof S.settings.panelTrans==="number"?S.settings.panelTrans:12), "panelTrans");
+  var thint=document.createElement("p"); thint.className="hint"; thint.textContent="Geser untuk pratinjau langsung; tekan Simpan Pengaturan Server di bawah untuk menyimpan bagi seluruh ruang."; thRow.appendChild(thint);
+  w.appendChild(thRow);
   var save=document.createElement("button"); save.className="big-btn"; save.type="button"; save.textContent="Simpan Pengaturan Server";
   save.onclick=async function(){
     save.disabled=true; save.textContent="Menyimpan…";
