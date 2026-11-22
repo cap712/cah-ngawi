@@ -849,13 +849,13 @@ function renderMembersTab(){
     var n2=document.createElement("div"); n2.className="sr-sub"; n2.textContent=(m.role||"")+(m.editor?" • editor":" • anggota");
     info.appendChild(n1); info.appendChild(n2); head.appendChild(info);
     row.appendChild(head);
-    var locked = (m.id==="owner") || (m.id==="boscuk" && me.id!=="owner");
+    var locked = (m.id==="owner" && me.id!=="owner") || (m.id==="boscuk" && me.id!=="owner");
     if(locked){ var lp=document.createElement("p"); lp.className="hint"; lp.textContent= m.id==="owner" ? "Pemilik ruang — tidak bisa diubah/dibuang dari sini." : "BOS CUK — hanya Pemilik yang bisa mengubahnya."; row.appendChild(lp); w.appendChild(row); return; }
     var g=document.createElement("div"); g.className="grid2"; g.style.marginTop="10px";
     var ni=labeledInput("Nama", m.name); var ri=labeledInput("Peran / label", m.role);
     g.appendChild(ni); g.appendChild(ri); row.appendChild(g);
     var chk=document.createElement("label"); chk.className="chk";
-    var cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!m.editor;
+    var cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!m.editor; if(m.id==="owner"){ cb.checked=true; cb.disabled=true; }
     chk.appendChild(cb); chk.appendChild(document.createTextNode("Editor ruang (hak penuh seperti BOS CUK)")); row.appendChild(chk);
     var pf=document.createElement("input"); pf.type="file"; pf.accept="image/*"; row.appendChild(pf);
     var acts=document.createElement("div"); acts.style.display="flex"; acts.style.gap="8px"; acts.style.marginTop="10px"; acts.style.flexWrap="wrap";
@@ -877,7 +877,7 @@ function renderMembersTab(){
       S.members=S.members.filter(function(x){ return x.id!==m.id; });
       try{ await saveIndex(); renderAll(false); renderMembersTab(); toast(m.name+" dikeluarkan."); }catch(e){ toast("Gagal: "+e.message); }
     };
-    acts.appendChild(sv); acts.appendChild(tk); if(m.id!==me.id) acts.appendChild(del);
+    acts.appendChild(sv); if(m.id!=="owner") acts.appendChild(tk); if(m.id!==me.id) acts.appendChild(del);
     row.appendChild(acts);
     if(revealTokenFor===m.id && revealTokenVal){
       var rv=document.createElement("div"); rv.style.marginTop="10px";
