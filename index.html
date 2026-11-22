@@ -251,6 +251,7 @@
     <div id="tab-anggota" class="hidden"></div>
     <div id="tab-undangan" class="hidden"></div>
     <div id="tab-tamu" class="hidden"><p class="hint" style="font-size:13.5px;line-height:1.6">Pengaturan server, anggota, dan undangan hanya untuk editor ruang (Tuan CAP &amp; BOS CUK). Kamu masuk sebagai anggota biasa: baca, tulis, balas, dan hapus pesanmu sendiri.</p></div>
+    <div id="tab-profil" class="hidden"></div>
     <div class="sheet-foot">
       <button class="mini-btn danger" id="logoutBtn" type="button" style="flex:1">Keluar</button>
       <button class="mini-btn acc" id="doneBtn" type="button" style="flex:1">Selesai</button>
@@ -534,14 +535,55 @@ function showProfileCard(mem){
 function openProfile(memberId){
   var mem=memberById(memberId);
   if(!mem){ toast("Anggota itu sudah tidak ada di ruang."); return; }
-  if(isEditor()){
-    openSheet("anggota");
-    setTimeout(function(){
-      var row=document.getElementById("member-row-"+mem.id);
-      if(row){ row.scrollIntoView({block:"center",behavior:"smooth"}); row.classList.add("flash"); setTimeout(function(){ row.classList.remove("flash"); },1800); }
-      else showProfileCard(mem);
-    }, 80);
-  } else showProfileCard(mem);
+  if(!isEditor()){ showProfileCard(mem); return; }
+  $("sheetWrap").classList.add("show");
+  $("sheetWho").textContent="Masuk sebagai "+me.name+" — "+(me.role||"")+" • editor ruang";
+  $("sheetTabs").style.display="flex";
+  $("tab-server").classList.add("hidden");
+  $("tab-anggota").classList.add("hidden");
+  $("tab-undangan").classList.add("hidden");
+  $("tab-tamu").classList.add("hidden");
+  $("tab-profil").classList.remove("hidden");
+  document.querySelectorAll("#sheetTabs button").forEach(function(b){ b.classList.remove("on"); });
+  renderProfileTab(mem);
+}
+function renderProfileTab(m){
+  var w=$("tab-profil"); w.innerHTML="";
+  var locked = (m.id==="owner" && me.id!=="owner") || (m.id==="boscuk" && me.id!=="owner");
+  var head=document.createElement("div"); head.style.textAlign="center"; head.style.marginBottom="12px";
+  var av=avatarEl({id:m.id, name:m.name}); av.style.width="92px"; av.style.height="92px"; av.style.margin="0 auto 10px"; av.style.fontSize="34px"; head.appendChild(av);
+  var nm0=document.createElement("div"); nm0.style.cssText="font-weight:800;font-size:19px"; nm0.textContent=m.name+(m.id===me.id?" (kamu)":""); head.appendChild(nm0);
+  var rl0=document.createElement("div"); rl0.className="sr-sub"; rl0.textContent=(m.role||"")+(m.editor?" • editor":" • anggota"); head.appendChild(rl0);
+  if(m.joinedAt){ var jn=document.createElement("div"); jn.className="hint"; jn.textContent="Anggota sejak "+new Date(m.joinedAt).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"}); head.appendChild(jn); }
+  w.appendChild(head);
+  if(locked){
+    var lp=document.createElement("p"); lp.className="hint"; lp.textContent= m.id==="owner" ? "Profil Pemilik hanya bisa diubah oleh Pemilik sendiri." : "Profil BOS CUK hanya bisa diubah oleh Pemilik."; w.appendChild(lp); return;
+  }
+  var g=document.createElement("div"); g.className="grid2";
+  var ni=labeledInput("Nama", m.name); var ri=labeledInput("Peran / label", m.role);
+  g.appendChild(ni); g.appendChild(ri); w.appendChild(g);
+  var chk=document.createElement("label"); chk.className="chk";
+  var cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!m.editor; if(m.id==="owner"){ cb.checked=true; cb.disabled=true; }
+  chk.appendChild(cb); chk.appendChild(document.createTextNode("Editor ruang (hak penuh seperti BOS CUK)")); w.appendChild(chk);
+  var pf=document.createElement("input"); pf.type="file"; pf.accept="image/*"; w.appendChild(pf);
+  var acts=document.createElement("div"); acts.style.cssText="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap";
+  var sv=document.createElement("button"); sv.className="mini-btn acc"; sv.type="button"; sv.textContent="Simpan";
+  sv.onclick=async function(){
+    m.name=ni._input.value.trim()||m.name; m.role=ri._input.value.trim(); m.editor=cb.checked;
+    if(pf.files && pf.files[0]){ var u=await shrinkTo(pf.files[0],160,"image/jpeg"); if(u){ m.photoChunks=await putLarge(u); delete photoCache[m.id]; } }
+    try{ await saveIndex(); if(m.id===me.id) me=m; loadPhotos(); renderAll(false); renderProfileTab(m); toast("Profil tersimpan."); }catch(e){ toast("Gagal: "+e.message); }
+  };
+  acts.appendChild(sv);
+  if(m.id!==me.id){
+    var del=document.createElement("button"); del.className="mini-btn danger"; del.type="button"; del.textContent="Buang dari Ruang";
+    del.onclick=async function(){
+      if(!(await showConfirm("Buang "+m.name+" dari ruang? Token tetapnya langsung mati dan ia kembali ke layar kode."))) return;
+      S.members=S.members.filter(function(x){ return x.id!==m.id; });
+      try{ await saveIndex(); $("sheetWrap").classList.remove("show"); renderAll(false); toast(m.name+" dikeluarkan."); }catch(e){ toast("Gagal: "+e.message); }
+    };
+    acts.appendChild(del);
+  }
+  w.appendChild(acts);
 }
 
 /* ================= RENDER PESAN ================= */
@@ -814,6 +856,7 @@ function openSheet(tab){
   $("tab-anggota").classList.toggle("hidden", !(ed&&tab==="anggota"));
   $("tab-undangan").classList.toggle("hidden", !(ed&&tab==="undangan"));
   $("tab-tamu").classList.toggle("hidden", ed);
+  $("tab-profil").classList.add("hidden");
   document.querySelectorAll("#sheetTabs button").forEach(function(b){ b.classList.toggle("on", b.dataset.tab===tab); });
   if(!ed) return;
   if(tab==="server") renderServerTab();
