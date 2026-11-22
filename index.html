@@ -71,6 +71,10 @@
   .msg.mine{flex-direction:row-reverse}
   .avatar{width:38px;height:38px;border-radius:50%;flex:0 0 auto;overflow:hidden;background:radial-gradient(circle at 32% 30%,#33549c,#0c1434 72%);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;border:1px solid var(--line)}
   .avatar img{width:100%;height:100%;object-fit:cover}
+  .avatar.clickable{cursor:pointer}
+  .avatar.clickable:hover{outline:2px solid #2dd4bf;outline-offset:1px}
+  .srow.flash{animation:rowflash 1.7s ease}
+  @keyframes rowflash{0%,55%{background:rgba(45,212,191,.20);border-color:#2dd4bf}100%{background:rgba(255,255,255,.03)}}
   .mbody{max-width:min(78%,640px);min-width:0}
   .msg.mine .mbody{display:flex;flex-direction:column;align-items:flex-end}
   .mhead{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:4px}
@@ -509,6 +513,36 @@ function avatarEl(m){
   else d.textContent=name.trim().charAt(0).toUpperCase()||"?";
   return d;
 }
+function showProfileCard(mem){
+  var old=document.getElementById("profCard"); if(old) old.remove();
+  var wrap=document.createElement("div"); wrap.id="profCard";
+  wrap.style.cssText="position:fixed;inset:0;background:rgba(2,6,18,.66);display:flex;align-items:center;justify-content:center;z-index:90;padding:18px";
+  var card=document.createElement("div");
+  card.style.cssText="background:#0b1530;border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:22px;width:min(320px,92vw);text-align:center;color:#e8eefc";
+  var av=avatarEl({id:mem.id, name:mem.name}); av.style.width="92px"; av.style.height="92px"; av.style.margin="0 auto 12px"; av.style.fontSize="34px";
+  card.appendChild(av);
+  var nm=document.createElement("div"); nm.style.cssText="font-weight:800;font-size:19px"; nm.textContent=mem.name; card.appendChild(nm);
+  if(mem.role){ var rl=document.createElement("div"); rl.style.cssText="opacity:.85;margin-top:4px;font-size:13.5px"; rl.textContent=mem.role; card.appendChild(rl); }
+  if(mem.joinedAt){ var jn=document.createElement("div"); jn.style.cssText="opacity:.65;margin-top:8px;font-size:12.5px"; jn.textContent="Anggota sejak "+new Date(mem.joinedAt).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"}); card.appendChild(jn); }
+  var btn=document.createElement("button"); btn.type="button"; btn.className="big-btn"; btn.style.marginTop="16px"; btn.textContent="Tutup";
+  btn.onclick=function(){ wrap.remove(); };
+  card.appendChild(btn);
+  wrap.appendChild(card);
+  wrap.addEventListener("click", function(e){ if(e.target===wrap) wrap.remove(); });
+  document.body.appendChild(wrap);
+}
+function openProfile(memberId){
+  var mem=memberById(memberId);
+  if(!mem){ toast("Anggota itu sudah tidak ada di ruang."); return; }
+  if(isEditor()){
+    openSheet("anggota");
+    setTimeout(function(){
+      var row=document.getElementById("member-row-"+mem.id);
+      if(row){ row.scrollIntoView({block:"center",behavior:"smooth"}); row.classList.add("flash"); setTimeout(function(){ row.classList.remove("flash"); },1800); }
+      else showProfileCard(mem);
+    }, 80);
+  } else showProfileCard(mem);
+}
 
 /* ================= RENDER PESAN ================= */
 function attRender(att, wrap){
@@ -543,7 +577,8 @@ function renderMessages(scrollBottom){
     var sel=document.createElement("div"); sel.className="selbox"+(selected[m.id]?" sel":""); sel.textContent=selected[m.id]?"✓":"";
     sel.onclick=function(){ toggleSelect(m.id); };
     row.appendChild(sel);
-    row.appendChild(avatarEl({id:m.authorId, name:m.authorName}));
+    var pav=avatarEl({id:m.authorId, name:m.authorName}); pav.classList.add("clickable"); pav.title="Lihat profil "+m.authorName; pav.onclick=function(){ openProfile(m.authorId); };
+    row.appendChild(pav);
     var body=document.createElement("div"); body.className="mbody";
     var head=document.createElement("div"); head.className="mhead";
     var nm=document.createElement("span"); nm.className="mname"; nm.textContent=m.authorName; head.appendChild(nm);
@@ -841,7 +876,7 @@ function renderServerTab(){
 function renderMembersTab(){
   var w=$("tab-anggota"); w.innerHTML="";
   (S.members||[]).forEach(function(m){
-    var row=document.createElement("div"); row.className="srow";
+    var row=document.createElement("div"); row.className="srow"; row.id="member-row-"+m.id;
     var head=document.createElement("div"); head.className="sr-head";
     head.appendChild(avatarEl({id:m.id, name:m.name}));
     var info=document.createElement("div"); info.style.flex="1"; info.style.minWidth="0";
