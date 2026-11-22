@@ -323,15 +323,21 @@ function extractJSON(text){
   }
   return JSON.parse(text.slice(start));
 }
+async function fetchT(url, opts, ms){
+  var ctl = new AbortController();
+  var to = setTimeout(function(){ ctl.abort(); }, ms || 20000);
+  try { return await fetch(url, Object.assign({}, opts || {}, {signal: ctl.signal})); }
+  finally { clearTimeout(to); }
+}
 async function kvGet(id){
-  var r = await fetch(BIN_BASE+"/"+id+"?cb="+Date.now()+"."+Math.random(), {cache:"no-store"});
+  var r = await fetchT(BIN_BASE+"/"+id+"?cb="+Date.now()+"."+Math.random(), {cache:"no-store"});
   if(!r.ok) throw new Error("GET "+r.status);
   return extractJSON(await r.text());
 }
 async function kvPut(id, val){
   var body = JSON.stringify(val);
   if(body.length > 98000) throw new Error("Data melebihi batas satu bin penyimpanan.");
-  var r = await fetch(BIN_BASE+"/"+id, {method:"PUT", headers:{"Content-Type":"application/json"}, body:body});
+  var r = await fetchT(BIN_BASE+"/"+id, {method:"PUT", headers:{"Content-Type":"application/json"}, body:body});
   var o = extractJSON(await r.text());
   if(o && o.status===1) throw new Error(o.message||"Simpan gagal");
   return o;
@@ -339,7 +345,7 @@ async function kvPut(id, val){
 async function kvCreate(val){
   var body = JSON.stringify(val);
   if(body.length > 98000) throw new Error("Data melebihi batas satu bin penyimpanan.");
-  var r = await fetch(BIN_BASE, {method:"POST", headers:{"Content-Type":"application/json"}, body:body});
+  var r = await fetchT(BIN_BASE, {method:"POST", headers:{"Content-Type":"application/json"}, body:body});
   var o = extractJSON(await r.text());
   if(!o || !o.id) throw new Error((o&&o.message)||"Buat penyimpanan gagal");
   return o.id;
