@@ -430,6 +430,12 @@ async function applyThemeAndLogo(){
   $("hName").textContent=S.settings.name||"CAH NGAWI";
   applyTransparency();
 }
+var NAME_COLORS=["#9C4A2F","#2F5D8A","#6B4E9E","#A8741A","#1F7A8C","#A03D63","#5B7C2A","#7A4A21","#44546A"];
+function nameColor(id){
+  var ix=(S.members||[]).findIndex(function(x){ return x.id===id; });
+  if(ix<0) return "#4D6556";
+  return NAME_COLORS[ix%NAME_COLORS.length];
+}
 function applyTransparency(){
   if(!S.settings) return;
   var bgOp=(typeof S.settings.bgOp==="number")?S.settings.bgOp:100;
@@ -570,7 +576,7 @@ function renderProfileTab(m){
   var locked = (m.id==="owner" && me.id!=="owner") || (m.id==="boscuk" && me.id!=="owner");
   var head=document.createElement("div"); head.style.textAlign="center"; head.style.marginBottom="12px";
   var av=avatarEl({id:m.id, name:m.name}); av.style.width="92px"; av.style.height="92px"; av.style.margin="0 auto 10px"; av.style.fontSize="34px"; head.appendChild(av);
-  var nm0=document.createElement("div"); nm0.style.cssText="font-weight:800;font-size:19px"; nm0.textContent=m.name+(m.id===me.id?" (kamu)":""); head.appendChild(nm0);
+  var nm0=document.createElement("div"); nm0.style.cssText="font-weight:800;font-size:19px"; nm0.textContent=m.name+(m.id===me.id?" (kamu)":""); nm0.style.color=nameColor(m.id); head.appendChild(nm0);
   var rl0=document.createElement("div"); rl0.className="sr-sub"; rl0.textContent=(m.role||"")+(m.editor?" • editor":" • anggota"); head.appendChild(rl0);
   if(m.joinedAt){ var jn=document.createElement("div"); jn.className="hint"; jn.textContent="Anggota sejak "+new Date(m.joinedAt).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"}); head.appendChild(jn); }
   w.appendChild(head);
@@ -641,7 +647,7 @@ function renderMessages(scrollBottom){
     row.appendChild(pav);
     var body=document.createElement("div"); body.className="mbody";
     var head=document.createElement("div"); head.className="mhead";
-    var nm=document.createElement("span"); nm.className="mname"; nm.textContent=m.authorName; head.appendChild(nm);
+    var nm=document.createElement("span"); nm.className="mname"; nm.textContent=m.authorName; nm.style.color=nameColor(m.authorId); head.appendChild(nm);
     var author=memberById(m.authorId);
     if(author && author.role){ var rl=document.createElement("span"); rl.className="mrole"; rl.textContent=author.role; head.appendChild(rl); }
     if(S.pinnedId===m.id){ var pt=document.createElement("span"); pt.className="pin-tag"; pt.textContent="📌 terpaku"; head.appendChild(pt); }
@@ -651,7 +657,7 @@ function renderMessages(scrollBottom){
     if(m.target){ var tc=document.createElement("span"); tc.className="target-chip"; tc.textContent = m.target.type==="all" ? "🎯 @all_agent — semua agent" : "🎯 @"+(m.target.name||"agent"); bub.appendChild(tc); bub.appendChild(document.createElement("br")); }
     if(m.replyTo){
       var q=document.createElement("button"); q.type="button"; q.className="quote";
-      var qa=document.createElement("span"); qa.className="qa"; qa.textContent=m.replyTo.authorName;
+      var qa=document.createElement("span"); qa.className="qa"; qa.textContent=m.replyTo.authorName; qa.style.color=nameColor(m.replyTo.id);
       var qt=document.createElement("span"); qt.className="qt"; qt.textContent=m.replyTo.snippet||"";
       q.appendChild(qa); q.appendChild(document.createElement("br")); q.appendChild(qt);
       q.onclick=(function(rid){ return function(){ jumpTo(rid); }; })(m.replyTo.id);
@@ -955,7 +961,7 @@ function renderMembersTab(){
     var head=document.createElement("div"); head.className="sr-head";
     head.appendChild(avatarEl({id:m.id, name:m.name}));
     var info=document.createElement("div"); info.style.flex="1"; info.style.minWidth="0";
-    var n1=document.createElement("div"); n1.className="sr-name"; n1.textContent=m.name+(m.id===me.id?" (kamu)":"");
+    var n1=document.createElement("div"); n1.className="sr-name"; n1.textContent=m.name+(m.id===me.id?" (kamu)":""); n1.style.color=nameColor(m.id);
     var n2=document.createElement("div"); n2.className="sr-sub"; n2.textContent=(m.role||"")+(m.editor?" • editor":" • anggota");
     info.appendChild(n1); info.appendChild(n2); head.appendChild(info);
     row.appendChild(head);
